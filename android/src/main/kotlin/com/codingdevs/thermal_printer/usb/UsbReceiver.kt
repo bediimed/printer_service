@@ -17,17 +17,22 @@ class UsbReceiver : BroadcastReceiver() {
         if (UsbManager.ACTION_USB_DEVICE_ATTACHED == action) {
             val usbDevice: UsbDevice? =
                 intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            if (usbDevice == null) return
+
+            val permissionIntent = Intent("com.flutter_pos_printer.USB_PERMISSION").apply {
+                setPackage(context.packageName)
+            }
 
             val mPermissionIndent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                 PendingIntent.getBroadcast(
                     context, 0,
-                    Intent("com.flutter_pos_printer.USB_PERMISSION"),
+                    permissionIntent,
                     PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                 )
             } else {
                 PendingIntent.getBroadcast(
                     context, 0,
-                    Intent("com.flutter_pos_printer.USB_PERMISSION"),
+                    permissionIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT
                 )
             }
