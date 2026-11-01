@@ -10,21 +10,29 @@ import android.util.Log
 
 class UsbReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
-        Log.d("UsbReceiver", "Inside USB Broadcast action ${intent!!.action}")
+        if (context == null || intent == null) return
+        Log.d("UsbReceiver", "Inside USB Broadcast action ${intent.action}")
 
         val action = intent.action
         if (UsbManager.ACTION_USB_DEVICE_ATTACHED == action) {
-
-            val usbDevice: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            val usbDevice: UsbDevice? =
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
 
             val mPermissionIndent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                PendingIntent.getBroadcast(context, 0, Intent("com.flutter_pos_printer.USB_PERMISSION"), PendingIntent.FLAG_MUTABLE)
+                PendingIntent.getBroadcast(
+                    context, 0,
+                    Intent("com.flutter_pos_printer.USB_PERMISSION"),
+                    PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
             } else {
-                PendingIntent.getBroadcast(context, 0, Intent("com.flutter_pos_printer.USB_PERMISSION"), 0)
+                PendingIntent.getBroadcast(
+                    context, 0,
+                    Intent("com.flutter_pos_printer.USB_PERMISSION"),
+                    PendingIntent.FLAG_UPDATE_CURRENT
+                )
             }
-            val mUSBManager = context?.getSystemService(Context.USB_SERVICE) as UsbManager?
+            val mUSBManager = context.getSystemService(Context.USB_SERVICE) as UsbManager?
             mUSBManager?.requestPermission(usbDevice, mPermissionIndent)
-
         }
     }
 }
