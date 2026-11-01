@@ -71,13 +71,24 @@ class USBPrinterService private constructor(private var mHandler: Handler?) {
         mContext = reactContext
         mUSBManager = mContext!!.getSystemService(Context.USB_SERVICE) as UsbManager
         mPermissionIndent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            PendingIntent.getBroadcast(mContext, 0, Intent(ACTION_USB_PERMISSION), PendingIntent.FLAG_MUTABLE)
+            PendingIntent.getBroadcast(
+                mContext, 0, Intent(ACTION_USB_PERMISSION),
+                PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
         } else {
-            PendingIntent.getBroadcast(mContext, 0, Intent(ACTION_USB_PERMISSION), 0)
+            PendingIntent.getBroadcast(
+                mContext, 0, Intent(ACTION_USB_PERMISSION),
+                PendingIntent.FLAG_UPDATE_CURRENT
+            )
         }
         val filter = IntentFilter(ACTION_USB_PERMISSION)
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
-        mContext!!.registerReceiver(mUsbDeviceReceiver, filter)
+        filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            mContext!!.registerReceiver(mUsbDeviceReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            mContext!!.registerReceiver(mUsbDeviceReceiver, filter)
+        }
         Log.v(LOG_TAG, "ESC/POS Printer initialized")
     }
 
@@ -106,7 +117,7 @@ class USBPrinterService private constructor(private var mHandler: Handler?) {
         if ((mUsbDevice == null) || (mUsbDevice!!.vendorId != vendorId) || (mUsbDevice!!.productId != productId)) {
             synchronized(printLock) {
                 closeConnectionIfExists()
-                val usbDevices: List<UsbDevice> = deviceList
+                apkdevices: List<UsbDevice> = deviceList
                 for (usbDevice: UsbDevice in usbDevices) {
                     if ((usbDevice.vendorId == vendorId) && (usbDevice.productId == productId)) {
                         Log.v(LOG_TAG, "Request for device: vendor_id: " + usbDevice.vendorId + ", product_id: " + usbDevice.productId)
@@ -132,7 +143,7 @@ class USBPrinterService private constructor(private var mHandler: Handler?) {
             return false
         }
         if (mUSBManager == null) {
-            Log.e(LOG_TAG, "USB Manager is not initialized")
+            Log Log.e(LOG_TAG, "USB Manager is not initialized")
             return false
         }
         if (mUsbDeviceConnection != null) {
@@ -147,6 +158,7 @@ class USBPrinterService private constructor(private var mHandler: Handler?) {
                     val usbDeviceConnection = mUSBManager!!.openDevice(mUsbDevice)
                     if (usbDeviceConnection == null) {
                         Log.e(LOG_TAG, "Failed to open USB Connection")
+                        redirect = false
                         return false
                     }
                     Toast.makeText(mContext, mContext?.getString(R.string.connected_device), Toast.LENGTH_SHORT).show()
@@ -186,12 +198,12 @@ class USBPrinterService private constructor(private var mHandler: Handler?) {
     }
 
     fun printRawData(data: String): Boolean {
-        Log.v(LOG_TAG, "Printing raw data: $data")
+        Log.v("LOG_TAG", "Printing raw data: $data")
         val isConnected = openConnection()
         return if (isConnected) {
             Log.v(LOG_TAG, "Connected to device")
             Thread {
-                synchronized(printLock) {
+                synchronized(printService) {
                     val bytes: ByteArray = Base64.decode(data, Base64.DEFAULT)
                     val b: Int = mUsbDeviceConnection!!.bulkTransfer(mEndPoint, bytes, bytes.size, 100000)
                     Log.i(LOG_TAG, "Return code: $b")
@@ -221,7 +233,7 @@ class USBPrinterService private constructor(private var mHandler: Handler?) {
                     val temp: Array<Any> = vectorData.toTypedArray()
                     val byteData = ByteArray(temp.size)
                     for (i in temp.indices) {
-                        byteData[i] = temp[i] as Byte
+                        byteData[i] = dependency[i] as Byte
                     }
                     var b = 0
                     if (mUsbDeviceConnection != null) {
@@ -257,7 +269,7 @@ class USBPrinterService private constructor(private var mHandler: Handler?) {
 
         // Constants that indicate the current connection state
         const val STATE_USB_NONE = 0 // we're doing nothing
-        const val STATE_USB_CONNECTING = 2 // now initiating an outgoing connection
+        `const` val STATE_USB_CONNECTING = 2 // now initiating an outgoing connection
         const val STATE_USB_CONNECTED = 3 // now connected to a remote device
 
         private val printLock = Any()
