@@ -1,4 +1,4 @@
-package com.codingdevs.thermal_printer
+package com.codingdevs.thermal_printer.adapter
 
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -24,17 +24,40 @@ class USBPrinterAdapter private constructor() {
     private var mUsbInterface: UsbInterface? = null
     private var mEndPoint: UsbEndpoint? = null
 
+    private fun buildPermissionIntent(): PendingIntent? {
+        val ctx = mContext ?: return null
+        return try {
+            val permissionIntent = Intent(ACTION_USB_PERMISSION).apply {
+                setPackage(ctx.packageName)
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                PendingIntent.getBroadcast(
+                    ctx, 0, permissionIntent,
+                    PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            } else {
+                PendingIntent.getBroadcast(
+                    ctx, 0, permissionIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(LOG_TAG, "Failed to create permission PendingIntent: ${e.message}")
+            null
+        }
+    }
+
     fun init(reactContext: Context?) {
         mContext = reactContext
         mUSBManager = mContext!!.getSystemService(Context.USB_SERVICE) as UsbManager
-        mPermissionIndent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            PendingIntent.getBroadcast(mContext, 0, Intent(ACTION_USB_PERMISSION), PendingIntent.FLAG_MUTABLE)
-        } else {
-            PendingIntent.getBroadcast(mContext, 0, Intent(ACTION_USB_PERMISSION), 0)
-        }
+        mPermissionIndent = buildPermissionIntent()
         val filter = IntentFilter(ACTION_USB_PERMISSION)
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
-        mContext!!.registerReceiver(mUsbDeviceReceiver, filter)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            mContext!!.registerReceiver(mUsbDeviceReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            mContext!!.registerReceiver(mUsbDeviceReceiver, filter)
+        }
         Log.v(LOG_TAG, "ESC/POS Printer initialized")
     }
 
@@ -48,12 +71,12 @@ class USBPrinterAdapter private constructor() {
                     if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                         Log.i(
                             LOG_TAG,
-                            "Success get permission for device " + usbDevice!!.deviceId + ", vendor_id: " + usbDevice.vendorId + " product_id: " + usbDevice.productId
+                            "Success get permission for device " + usbDevice?.deviceId + ", vendor_id: " + usbDevice?.vendorId + " product_id: " + usbDevice?.productId
                         )
                         mUsbDevice = usbDevice
                     } else {
                         Toast.makeText(
-                            context, mContext?.getString(R.string.user_refuse_perm) + ": ${usbDevice!!.deviceName}",
+                            context, mContext?.getString(R.string.user_refuse_perm) + ": ${usbDevice?.deviceName}",
                             Toast.LENGTH_LONG
                         ).show()
                     }
@@ -99,7 +122,15 @@ class USBPrinterAdapter private constructor() {
                             "Request for device: vendor_id: " + usbDevice.vendorId + ", product_id: " + usbDevice.productId
                         )
                         closeConnectionIfExists()
-                        mUSBManager!!.requestPermission(usbDevice, mPermissionIndent)
+                        if (mPermissionIndent == null) {
+                            mPermissionIndent = buildPermissionIntent()
+                        }
+                        val pi = mPermissionIndent
+                        if (pi == null) {
+                            Log.e(LOG_TAG, "Permission PendingIntent is null, cannot request permission")
+                            return false
+                        }
+                        mUSBManager!!.requestPermission(usbDevice, pi)
                         return true
                     }
                 }
