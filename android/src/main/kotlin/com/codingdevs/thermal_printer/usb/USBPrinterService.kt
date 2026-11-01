@@ -65,17 +65,7 @@ class USBPrinterService private constructor(private var mHandler: Handler?) {
     fun init(reactContext: Context?) {
         mContext = reactContext
         mUSBManager = mContext!!.getSystemService(Context.USB_SERVICE) as UsbManager
-        mPermissionIndent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            PendingIntent.getBroadcast(
-                mContext, 0, Intent(ACTION_USB_PERMISSION),
-                PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-        } else {
-            PendingIntent.getBroadcast(
-                mContext, 0, Intent(ACTION_USB_PERMISSION),
-                PendingIntent.FLAG_UPDATE_CURRENT
-            )
-        }
+        
         val filter = IntentFilter(ACTION_USB_PERMISSION)
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
@@ -116,7 +106,19 @@ class USBPrinterService private constructor(private var mHandler: Handler?) {
                     if ((usbDevice.vendorId == vendorId) && (usbDevice.productId == productId)) {
                         Log.v(LOG_TAG, "Request for device: vendor_id: " + usbDevice.vendorId + ", product_id: " + usbDevice.productId)
                         closeConnectionIfExists()
-                        mUSBManager!!.requestPermission(usbDevice, mPermissionIndent)
+                        
+                        // BULLETPROOF PERMISSION FIX: Create PendingIntent directly here
+                        val permissionIntent = Intent(ACTION_USB_PERMISSION).apply {
+                            setPackage(mContext!!.packageName)
+                        }
+                        val flags = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                        } else {
+                            PendingIntent.FLAG_UPDATE_CURRENT
+                        }
+                        val safePendingIntent = PendingIntent.getBroadcast(mContext, 0, permissionIntent, flags)
+                        
+                        mUSBManager!!.requestPermission(usbDevice, safePendingIntent)
                         state = STATE_USB_CONNECTING
                         mHandler?.obtainMessage(STATE_USB_CONNECTING)?.sendToTarget()
                         return true
